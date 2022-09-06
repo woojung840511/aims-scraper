@@ -224,21 +224,15 @@ public class 신한생명 extends TargetCompnay {
         try {
             start();
 
-            categoryProductsMap.keySet().forEach(category -> {
-                        try {
-                            selectCategory(category);
+            for (String category: categoryProductsMap.keySet()) {
+                selectCategory(category);
 
-                            Select productSelect = new Select(driver.findElement(
-                                    By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
+                Select productSelect = new Select(driver.findElement(
+                        By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
 
-                            List<String> prdList = getOptionStrings(productSelect);
-                            categoryProductsMap.put(category, prdList);
-
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-            );
+                List<String> prdList = getOptionStrings(productSelect);
+                categoryProductsMap.put(category, prdList);
+            }
 
         } catch (Exception e) {
             throw new RuntimeException(e);
