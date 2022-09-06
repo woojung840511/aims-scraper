@@ -4,16 +4,28 @@ import static aims.util.InsuranceUtil.getBirthday;
 
 import aims.util.WaitUtil;
 import aims.vo.TreatyScrapData;
-import aims.vo.TreatyScrapResult;
+import aims.vo.ScrapResult;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
-import java.util.stream.Collectors;
+import java.util.function.BiFunction;
+
+import aims.vo.TypeScrapData;
+import com.google.gson.Gson;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.Select;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class 신한생명 extends TargetCompnay {
+
+    public final static Logger logger = LoggerFactory.getLogger(신한생명.class);
+
+    protected final static Map<String, List<String>> prdTypeMap = new HashMap<>();
 
     static {
         List<String> categories = new ArrayList<>();
@@ -22,20 +34,18 @@ public class 신한생명 extends TargetCompnay {
         categories.add("상해");
         categories.add("어린이");
         categories.forEach(c -> {
-            toDo.put(c, new ArrayList<>());
+            categoryProductsMap.put(c, new ArrayList<>());
         });
     }
 
-    public 신한생명(Condition condition) throws Exception {
-        super(condition);
+    public 신한생명(String url) {
+        super(url);
     }
 
     public static void main(String[] args) {
         try {
-            Condition condition = new Condition();
-            condition.setUrl("https://www.shinhanlife.co.kr/hp/cdhi0290.do#");
 
-            new 신한생명(condition).scrap();
+            new 신한생명("https://www.shinhanlife.co.kr/hp/cdhi0290.do#").scrap();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -43,132 +53,209 @@ public class 신한생명 extends TargetCompnay {
         }
     }
 
+    @Override
+    protected void start() throws Exception {
+        super.start();
+        clickFirstCalcBtn();
+    }
+
     protected void scrap() throws Exception {
 
-        List<TreatyScrapResult> resultList = new ArrayList<>();
+        setDefaultScrapRange(); // 스크랩 범위 설정 (category에 따른 product 목록 설정)
 
-        setToDo(); // 스크랩 범위 설정 (category에 따른 product 목록 설정)
-
-        for (String category : toDo.keySet()) {
-            for (String product : toDo.get(category)) {
-
-                List<TreatyScrapData> sendList = new ArrayList<>();
-                boolean success = false;
+        List<ScrapResult> resultList = new ArrayList<>();
+        for (String category : categoryProductsMap.keySet()) {
+            for (String product : categoryProductsMap.get(category)) {
 
                 logger.info("카테고리: {} \\t 상품: {}", category, product);
+                ScrapTarget scrapTarget =
+                        new ScrapTarget(this.getClass().getSimpleName(), category, product, resultList);
 
-                startDriver();
+                start();
+                boolean success = false;
 
                 try {
-
-                    clickFirstCalcBtn();
-                    setCategory(category);
-                    setProduct(product);
+                    selectCategory(category);
+                    selectProduct(product);
                     setUserInfo();
 
-                    List<String> types = new Select(
-                        driver.findElement(By.xpath("//select[@title='보험종류']"))).getOptions()
-                        .stream()
-                        .map(WebElement::getText).toList();
+//                    success = scrapTreatyOfProduct(category, product);
+                    success = scrapTypesOfProduct(category, product);
 
-                    for (String productType : types) {
-
-                        WebElement acoBtn = helper.waitElementToBeClickable(By.xpath(
-                            "//div[@class='basicCell'][contains(.,'주계약계산')]/ancestor::li//div[@class='accoBtnCell']//button"));
-                        if (acoBtn.getAttribute("aria-expanded").equals("false")) {
-                            helper.doClick(acoBtn);
-                        }
-
-                        logger.info("productType : {}", productType);
-                        new Select(driver.findElement(
-                            By.xpath("//select[@title='보험종류']"))).selectByVisibleText(productType);
-
-                        WaitUtil.loading();
-                        tryResetBirthDay();
-                        // 주계약 확인 버튼
-                        helper.doClick(
-                            By.cssSelector("#mnprDivision > div.btnArea.btnLoCtl > span > button"));
-
-                        List<TreatyScrapData> addList = getTreatyList(category, product, productType);
-                        sendList.addAll(addList);
-
-                        success = true;
-                    }
-                } catch (Exception e) {
+                } catch (InterruptedException e) {
 
                     logger.info("error message {}", e.getMessage());
                     logger.info("실패! 카테고리: {} 상품: {}", category, product);
+                    throw new RuntimeException(e);
 
                 } finally {
-                    stopDriver();
-//                    sendData(sendList);
 
-                    resultList.add(new TreatyScrapResult("신한생명", category, product, success));
+                    stop();
+                    resultList.add(
+                            new ScrapResult(scrapTarget, success));
                 }
+
             }
         }
 
         resultList.forEach(r -> logger.info(r.toString()));
     }
 
+    private boolean scrapTypesOfProduct(String category, String product) {
+        boolean success = false;
+
+        try {
+            Map<String, List<String>> typeOptionMap = new HashMap<>();
+            TypeScrapData 신한생명 = new TypeScrapData("신한생명", category, product, typeOptionMap);
+
+            helper.waitPesenceOfAllElementsLocatedBy(
+                    By.xpath("//div[@id='mnprDivision'] // li")).stream()
+                    .filter(WebElement::isDisplayed)
+                    .forEach( li -> {
+                        try {
+                            String title = li.findElement(By.cssSelector("div.item")).getText();
+                            List<String> optionList = new Select(
+                                    li.findElement(By.cssSelector("div.val select")))
+                                    .getOptions().stream()
+                                    .map(WebElement::getText).toList();
+
+                            typeOptionMap.put(title, optionList);
+                        } catch (Exception ignore) {
+                        }
+                    });
+
+            sendTypeOfProduct(신한생명);
+
+            success = true;
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+
+        return success;
+    }
+
+    private void sendTypeOfProduct(TypeScrapData typeScrapData) {
+        String jsonData = new Gson().toJson(typeScrapData);
+        String url = "http://127.0.0.1:8081/treatyResearch";
+//        String url = "https://api.nuzal.kr/treatyResearch";
+        logger.info("전송 데이터: {}", jsonData);
+        System.out.println();
+//        HttpClientUtil.sendPOSTWithJwtToken(url, jsonData );
+
+    }
+
+    private boolean scrapTreatyOfProduct(String category, String product) {
+
+        boolean success = false;
+
+        try {
+            List<TreatyScrapData> treatyList = new ArrayList<>();
+            List<String> types = getOptionStrings(new Select(
+                    driver.findElement(By.xpath("//select[@title='보험종류']"))));
+
+            for (String productType : types) {
+                logger.info("productType : {}", productType);
+                expandMainTreatyAcoBtn();
+                selectProductType(new Select(driver.findElement(
+                        By.xpath("//select[@title='보험종류']"))), productType);
+                helper.waitForLoading();
+
+                // 주계약 확인 버튼
+                helper.doClick(
+                        By.cssSelector("#mnprDivision > div.btnArea.btnLoCtl > span > button"));
+                tryResetBirthDayIfNeeded();
+
+                treatyList.addAll(getTreatyList(category, product, productType));
+
+            }
+
+            sendData(treatyList);
+            success = true;
+
+        } catch (Exception e) {
+            logger.info(e.getMessage());
+
+        }
+
+        return success;
+    }
+
+
+    private void selectProductType(Select driver, String productType) {
+        driver.selectByVisibleText(productType);
+    }
+
+    private static void expandMainTreatyAcoBtn() throws InterruptedException {
+        WebElement acoBtn = helper.waitElementToBeClickable(By.xpath(
+                "//div[@class='basicCell'][contains(.,'주계약계산')]/ancestor::li//div[@class='accoBtnCell']//button"));
+        if (acoBtn.getAttribute("aria-expanded").equals("false")) {
+            helper.doClick(acoBtn);
+        }
+    }
+
+    private List<String> getOptionStrings(Select select) {
+        return select.getOptions()
+                .stream()
+                .map(WebElement::getText).toList();
+    }
 
 
     private List<TreatyScrapData> getTreatyList(String category, String product, String productType) {
-        List<TreatyScrapData> sendList = new ArrayList<>();
+        List<TreatyScrapData> list = new ArrayList<>();
         helper.waitPesenceOfAllElementsLocatedBy(
-                By.xpath("//tbody[@class='intyList']//td[@title='가입상품']"))
-            .forEach(td -> {
-                sendList.add(new TreatyScrapData("신한생명", category, product, productType, td.getText()));
-            });
-        return sendList;
+                        By.xpath("//tbody[@class='intyList']//td[@title='가입상품']"))
+                .forEach(td -> {
+                    list.add(new TreatyScrapData("신한생명", category, product, productType, td.getText()));
+                });
+        return list;
     }
 
-    private void setProduct(String product) {
-        new Select(driver.findElement(
-            By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")))
-            .selectByVisibleText(product);
+    private void selectProduct(String product) {
+        selectProductType(new Select(driver.findElement(
+                By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']"))), product);
     }
 
-    private void setToDo() throws Exception {
+    private void setDefaultScrapRange() {
 
-//        startDriver(info);
-        clickFirstCalcBtn(); // 모달 진입
+        try {
+            start();
 
-        toDo.keySet().forEach(category -> {
-                List<String> products = toDo.get(category);
+            categoryProductsMap.keySet().forEach(category -> {
+                        try {
+                            selectCategory(category);
 
-                try {
-                    setCategory(category);
+                            Select productSelect = new Select(driver.findElement(
+                                    By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
 
-                    Select productSelect = new Select(driver.findElement(
-                        By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
+                            List<String> prdList = getOptionStrings(productSelect);
+                            categoryProductsMap.put(category, prdList);
 
-                    List<String> collect = productSelect.getOptions().stream()
-                        .map(WebElement::getText).collect(Collectors.toList());
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+            );
 
-                    products.addAll(collect);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
 
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+        } finally {
+            stop();
+
+            int count = 0;
+            for (Entry<String, List<String>> entry : categoryProductsMap.entrySet()) {
+
+                logger.info("카테고리: {} ({}개)", entry.getKey(), entry.getValue().size());
+                count += entry.getValue().size();
             }
-        );
-
-//        stopDriver(info);
-
-        int count = 0;
-        for (Entry<String, List<String>> entry : toDo.entrySet()) {
-
-            logger.info("카테고리: {} ({}개)", entry.getKey(), entry.getValue().size());
-            count += entry.getValue().size();
+            logger.info("총 {} 개", count);
         }
-        logger.info("총 {} 개", count);
     }
 
-    private void setCategory(String category) throws InterruptedException {
+    private void selectCategory(String category) throws InterruptedException {
         Select categorySelect = new Select(driver.findElement(
-            By.xpath("//div[@class='dataSrchBox']/select[@title='상품종류']")));
-        categorySelect.selectByVisibleText(category);
+                By.xpath("//div[@class='dataSrchBox']/select[@title='상품종류']")));
+        selectProductType(categorySelect, category);
         WaitUtil.loading(1);
     }
 
@@ -186,7 +273,7 @@ public class 신한생명 extends TargetCompnay {
     private void setUserInfo() throws Exception {
 
         for (WebElement el : helper.waitVisibilityOfAllElementsLocatedBy(
-            By.xpath("//input[@title='생년월일']"))) { // 어린이 보험일 경우 여러개
+                By.xpath("//input[@title='생년월일']"))) { // 어린이 보험일 경우 여러개
 
             helper.doSendKeys(el, getBirthday(30));
         }
@@ -196,7 +283,7 @@ public class 신한생명 extends TargetCompnay {
 
         // 직업검색 버튼
         helper.doClick(By.cssSelector(
-            "#csinDivision > div.infoRowArea > ul > li:nth-child(5) > div.val > button"));
+                "#csinDivision > div.infoRowArea > ul > li:nth-child(5) > div.val > button"));
         helper.doSendKeys(By.id("jobNmPop"), "회사");
         helper.doClick(By.id("btnJobSearch"));
         helper.doClick(By.xpath("//*[@id='JobSearchList']/li/a[contains(.,'회사 사무직 종사자')]"));
@@ -211,25 +298,25 @@ public class 신한생명 extends TargetCompnay {
         helper.waitForLoading();
         WaitUtil.loading(2);
 
-        tryResetBirthDay(); // 새 생년월일 입력
+        tryResetBirthDayIfNeeded(); // 새 생년월일 입력
     }
 
-    private void tryResetBirthDay() throws Exception {
+    private void tryResetBirthDayIfNeeded() throws Exception {
 
         try {
             if (driver.findElement(By.id("messagePopWrap")).isDisplayed()) { // 알람창이 떴을 경우
 
                 String text = driver.findElement(
-                    By.xpath("//*[@id='messagePopWrap']//div[@title='알림']/p")).getText();
+                        By.xpath("//*[@id='messagePopWrap']//div[@title='알림']/p")).getText();
 
                 int startAge = Integer.parseInt(text.substring(
-                    text.lastIndexOf("가입 가능한 연령은 ") + "가입 가능한 연령은 ".length(),
-                    text.lastIndexOf("세 ~ ")
+                        text.lastIndexOf("가입 가능한 연령은 ") + "가입 가능한 연령은 ".length(),
+                        text.lastIndexOf("세 ~ ")
                 ).replaceAll("\\D", ""));
 
                 int endAge = Integer.parseInt(text.substring(
-                    text.lastIndexOf("세 ~ ") + "세 ~ ".length(),
-                    text.lastIndexOf("까지 가능")
+                        text.lastIndexOf("세 ~ ") + "세 ~ ".length(),
+                        text.lastIndexOf("까지 가능")
                 ).replaceAll("\\D", ""));
 
                 helper.doClick(By.id("popupBtn2")); // 닫기 버튼
@@ -241,13 +328,13 @@ public class 신한생명 extends TargetCompnay {
                 logger.info("가입가능한 연령의 생년월일 {}", birthday);
 
                 for (WebElement el : helper.waitVisibilityOfAllElementsLocatedBy(
-                    By.xpath("//input[@title='생년월일']"))) {
+                        By.xpath("//input[@title='생년월일']"))) {
 
                     helper.doSendKeys(el, birthday); // 새 생년월일 입력
                 }
 
                 helper.doClick(
-                    By.cssSelector("#csinDivision > div.btnArea.btnLoCtl > span > button")); //확인버튼
+                        By.cssSelector("#csinDivision > div.btnArea.btnLoCtl > span > button")); //확인버튼
                 helper.waitForLoading();
             }
         } catch (Exception e) {

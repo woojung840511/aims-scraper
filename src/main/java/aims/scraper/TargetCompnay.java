@@ -1,5 +1,6 @@
 package aims.scraper;
 
+import aims.vo.ScrapResult;
 import aims.vo.TreatyScrapData;
 import com.google.gson.Gson;
 import io.github.bonigarcia.wdm.WebDriverManager;
@@ -7,10 +8,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.validation.Valid;
-import javax.validation.constraints.NotNull;
+
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.ToString;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -20,32 +20,27 @@ import org.slf4j.LoggerFactory;
 public abstract class TargetCompnay {
 
     public final static Logger logger = LoggerFactory.getLogger(TargetCompnay.class);
-    protected WebDriver driver;
-    protected Helper helper;
+    protected static WebDriver driver;
+    protected static Helper helper;
+    protected String url;
 
-    protected Condition condition;
+    protected static final Map<String, List<String>> categoryProductsMap = new HashMap<>();
 
     @Getter
-    @Setter
+    @AllArgsConstructor
     @ToString
-    static class Condition {
-        @NotNull(message = "url은 반드시 필요합니다.")
-        private String url;
-
-        private String categorySelected;
-        private String productSelected;
+    static class ScrapTarget {
+        String company;
+        String category;
+        String product;
+        List<ScrapResult> resultList;
     }
 
-    public TargetCompnay(@Valid TargetCompnay.Condition condition) throws Exception {
-        WebDriverManager.chromedriver().setup();
-        driver = new ChromeDriver();
-        helper = new Helper(driver);
-        this.condition = condition;
+    public TargetCompnay(String url) {
+        this.url = url;
     }
 
-    protected static final Map<String, List<String>> toDo = new HashMap<>();
-
-    protected void stopDriver() {
+    protected void stop() {
         Set<String> windowHandles = driver.getWindowHandles();
         for (String windowHandle : windowHandles) {
             driver.switchTo().window(windowHandle);
@@ -54,12 +49,14 @@ public abstract class TargetCompnay {
         driver.quit();
     }
 
-    protected void startDriver() {
+    protected void start() throws Exception {
+        WebDriverManager.chromedriver().setup();
         driver = new ChromeDriver();
-        driver.get(condition.getUrl());
+        helper = new Helper(driver);
+        driver.get(url);
     }
 
-    protected void sendData(List<TreatyScrapData> sendList) {
+    protected static void sendData(List<TreatyScrapData> sendList) {
         String jsonData = new Gson().toJson(sendList);
         String url = "http://127.0.0.1:8081/treatyResearch";
 //        String url = "https://api.nuzal.kr/treatyResearch";

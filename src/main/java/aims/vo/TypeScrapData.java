@@ -1,27 +1,17 @@
 package aims.vo;
 
 import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Map;
 
-
 @AllArgsConstructor
-public class TreatyScrapData {
+@ToString
+public class TypeScrapData {
 
     String company;
-
     String category;
-
     String product;
-
-    String productType;
-
-    String treaty;
-
-
+    Map<String, List<String>> typeOptionMap;
 }
-
-
