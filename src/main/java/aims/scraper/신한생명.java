@@ -16,6 +16,7 @@ import java.util.function.BiFunction;
 import aims.vo.TypeScrapData;
 import com.google.gson.Gson;
 import org.openqa.selenium.By;
+import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.Select;
 import org.slf4j.Logger;
@@ -109,18 +110,21 @@ public class 신한생명 extends TargetCompnay {
             TypeScrapData 신한생명 = new TypeScrapData("신한생명", category, product, typeOptionMap);
 
             helper.waitPesenceOfAllElementsLocatedBy(
-                    By.xpath("//div[@id='mnprDivision'] // li")).stream()
+                            By.xpath("//div[@id='mnprDivision'] // li")).stream()
                     .filter(WebElement::isDisplayed)
-                    .forEach( li -> {
+                    .forEach(li -> {
+                        String title = li.findElement(By.cssSelector("div.item")).getText();
+                        WebElement div = li.findElement(By.cssSelector("div.val"));
                         try {
-                            String title = li.findElement(By.cssSelector("div.item")).getText();
                             List<String> optionList = new Select(
-                                    li.findElement(By.cssSelector("div.val select")))
+                                    div.findElement(By.tagName("select")))
                                     .getOptions().stream()
                                     .map(WebElement::getText).toList();
 
                             typeOptionMap.put(title, optionList);
-                        } catch (Exception ignore) {
+                        } catch (NoSuchElementException ignore) {
+                            logger.info("select tag가 아님", ignore);
+
                         }
                     });
 
