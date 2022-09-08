@@ -4,9 +4,8 @@ import aims.vo.ScrapResult;
 import aims.vo.TreatyScrapData;
 import com.google.gson.Gson;
 import io.github.bonigarcia.wdm.WebDriverManager;
-import java.util.HashMap;
+
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -49,7 +48,7 @@ public abstract class TargetCompnay {
         driver.quit();
     }
 
-    protected void start() throws Exception {
+    protected void scrapStart() throws Exception {
         WebDriverManager.chromedriver().setup();
         driver = new ChromeDriver();
         helper = new Helper(driver);

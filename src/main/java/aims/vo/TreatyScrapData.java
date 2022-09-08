@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 
-@AllArgsConstructor
+@Setter
 public class TreatyScrapData {
 
     String company;
@@ -21,7 +21,10 @@ public class TreatyScrapData {
 
     String treaty;
 
-
+    public TreatyScrapData(String productType, String treaty) {
+        this.productType = productType;
+        this.treaty = treaty;
+    }
 }
 
 
