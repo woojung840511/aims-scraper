@@ -6,7 +6,6 @@ import aims.util.WaitUtil;
 import aims.vo.TreatyScrapData;
 import aims.vo.ScrapResult;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -17,14 +16,12 @@ import java.util.Map.Entry;
 import aims.vo.TypeScrapData;
 import com.google.gson.Gson;
 import java.util.Set;
+import java.util.function.Function;
 import lombok.AllArgsConstructor;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
-import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.FluentWait;
 import org.openqa.selenium.support.ui.Select;
-import org.openqa.selenium.support.ui.Wait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,7 +75,7 @@ public class 신한생명 extends TargetCompnay {
         try {
             start();
 
-            for (String category: scrapRangeMap.keySet()) {
+            for (String category : scrapRangeMap.keySet()) {
                 selectCategory(category);
 
                 Select productSelect = new Select(driver.findElement(
@@ -120,7 +117,7 @@ public class 신한생명 extends TargetCompnay {
 
                 logger.info("카테고리: {} \\t 상품: {}", category, product);
                 ScrapTarget scrapTarget =
-                        new ScrapTarget(this.getClass().getSimpleName(), category, product, resultList);
+                    new ScrapTarget(this.getClass().getSimpleName(), category, product, resultList);
 
                 start();
                 boolean success = false;
@@ -133,23 +130,47 @@ public class 신한생명 extends TargetCompnay {
                     Map<String, List<String>> typeMap = scrapTypesOfProduct(category, product);
 
                     @AllArgsConstructor
-                    class KeyOption {
+                    class ProductType {
                         String key;
                         String option;
                     }
 
-                    List<List<KeyOption>> typeList = new ArrayList<>();
-                    Iterator<String> keyIt = typeMap.keySet().iterator();
+                    Function<String, List<ProductType>> getTypeOptionMap =
+                        type -> {
+                            List<ProductType> list = new ArrayList<>();
 
+                            typeMap.get(type).forEach(
+                                option -> list.add(new ProductType(type, option)));
+
+                            return list;
+                        };
+
+                    List<ProductType[]> typeList = new ArrayList<>();
+                    int idx = 0;
+
+                    List<List<ProductType>> tempList = new ArrayList<>();
                     for (String typeKey : typeMap.keySet()) {
-                        for (String option : typeMap.get(typeKey)) {
-
-                            KeyOption keyOption = new KeyOption(typeKey, option);
-
-
-                        }
+                        tempList.add(getTypeOptionMap.apply(typeKey));
                     }
 
+                    Function< Iterator<List<ProductType>>, List<ProductType[]> > getCaseList =
+                        it -> {
+                            if (it.hasNext()) {
+
+                            } else {
+
+                            }
+
+                            return null;
+                        };
+
+
+/*                    ProductType[] typeArr = new ProductType[typeMap.keySet().size()];
+                    for (int i = 0; i < tempList.size(); i++) {
+                        List<ProductType> optionsForOneType = tempList.get(i);
+
+
+                    }*/
 
 
                     success = scrapTreatyOfProduct(category, product, typeMap);
@@ -164,7 +185,7 @@ public class 신한생명 extends TargetCompnay {
 
                     stop();
                     resultList.add(
-                            new ScrapResult(scrapTarget, success));
+                        new ScrapResult(scrapTarget, success));
                 }
 
             }
@@ -199,7 +220,7 @@ public class 신한생명 extends TargetCompnay {
                     logger.info("select tag가 아님", ignore);
                 }
 
-                if ( (title.equals("보험종류") || title.equals("보험형태")) && optionList != null) {
+                if ((title.equals("보험종류") || title.equals("보험형태")) && optionList != null) {
                     typeMap.put(title, optionList);
                 }
             }
@@ -232,19 +253,19 @@ public class 신한생명 extends TargetCompnay {
         try {
             List<TreatyScrapData> treatyList = new ArrayList<>();
             List<String> types = getOptionStrings(new Select(
-                    driver.findElement(By.xpath("//select[@title='보험종류']"))));
+                driver.findElement(By.xpath("//select[@title='보험종류']"))));
 
             for (String productType : types) {
                 logger.info("productType : {}", productType);
                 expandMainTreatyAcoBtn();
 
                 selectProductType(new Select(driver.findElement(
-                        By.xpath("//select[@title='보험종류']"))), productType);
+                    By.xpath("//select[@title='보험종류']"))), productType);
                 helper.waitForLoading();
 
                 // 주계약 확인 버튼
                 helper.doClick(
-                        By.cssSelector("#mnprDivision > div.btnArea.btnLoCtl > span > button"));
+                    By.cssSelector("#mnprDivision > div.btnArea.btnLoCtl > span > button"));
                 tryResetBirthDayIfNeeded();
 
                 treatyList.addAll(getTreatyList(category, product, productType));
@@ -269,7 +290,7 @@ public class 신한생명 extends TargetCompnay {
 
     private static void expandMainTreatyAcoBtn() throws InterruptedException {
         WebElement acoBtn = helper.waitElementToBeClickable(By.xpath(
-                "//div[@class='basicCell'][contains(.,'주계약계산')]/ancestor::li//div[@class='accoBtnCell']//button"));
+            "//div[@class='basicCell'][contains(.,'주계약계산')]/ancestor::li//div[@class='accoBtnCell']//button"));
         if (acoBtn.getAttribute("aria-expanded").equals("false")) {
             helper.doClick(acoBtn);
         }
@@ -277,31 +298,31 @@ public class 신한생명 extends TargetCompnay {
 
     private List<String> getOptionStrings(Select select) {
         return select.getOptions()
-                .stream()
-                .map(WebElement::getText).toList();
+            .stream()
+            .map(WebElement::getText).toList();
     }
 
 
-    private List<TreatyScrapData> getTreatyList(String category, String product, String productType) {
+    private List<TreatyScrapData> getTreatyList(String category, String product,
+        String productType) {
         List<TreatyScrapData> list = new ArrayList<>();
         helper.waitPesenceOfAllElementsLocatedBy(
-                        By.xpath("//tbody[@class='intyList']//td[@title='가입상품']"))
-                .forEach(td -> {
-                    list.add(new TreatyScrapData("신한생명", category, product, productType, td.getText()));
-                });
+                By.xpath("//tbody[@class='intyList']//td[@title='가입상품']"))
+            .forEach(td -> {
+                list.add(new TreatyScrapData("신한생명", category, product, productType, td.getText()));
+            });
         return list;
     }
 
     private void selectProduct(String product) {
         selectProductType(new Select(driver.findElement(
-                By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']"))), product);
+            By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']"))), product);
     }
-
 
 
     private void selectCategory(String category) throws InterruptedException {
         Select categorySelect = new Select(driver.findElement(
-                By.xpath("//div[@class='dataSrchBox']/select[@title='상품종류']")));
+            By.xpath("//div[@class='dataSrchBox']/select[@title='상품종류']")));
         selectProductType(categorySelect, category);
         WaitUtil.loading(1);
     }
@@ -320,7 +341,7 @@ public class 신한생명 extends TargetCompnay {
     private void setUserInfo() throws Exception {
 
         for (WebElement el : helper.waitVisibilityOfAllElementsLocatedBy(
-                By.xpath("//input[@title='생년월일']"))) { // 어린이 보험일 경우 여러개
+            By.xpath("//input[@title='생년월일']"))) { // 어린이 보험일 경우 여러개
 
             helper.doSendKeys(el, getBirthday(30));
         }
@@ -330,7 +351,7 @@ public class 신한생명 extends TargetCompnay {
 
         // 직업검색 버튼
         helper.doClick(By.cssSelector(
-                "#csinDivision > div.infoRowArea > ul > li:nth-child(5) > div.val > button"));
+            "#csinDivision > div.infoRowArea > ul > li:nth-child(5) > div.val > button"));
         helper.doSendKeys(By.id("jobNmPop"), "회사");
         helper.doClick(By.id("btnJobSearch"));
         helper.doClick(By.xpath("//*[@id='JobSearchList']/li/a[contains(.,'회사 사무직 종사자')]"));
@@ -354,16 +375,16 @@ public class 신한생명 extends TargetCompnay {
             if (driver.findElement(By.id("messagePopWrap")).isDisplayed()) { // 알람창이 떴을 경우
 
                 String text = driver.findElement(
-                        By.xpath("//*[@id='messagePopWrap']//div[@title='알림']/p")).getText();
+                    By.xpath("//*[@id='messagePopWrap']//div[@title='알림']/p")).getText();
 
                 int startAge = Integer.parseInt(text.substring(
-                        text.lastIndexOf("가입 가능한 연령은 ") + "가입 가능한 연령은 ".length(),
-                        text.lastIndexOf("세 ~ ")
+                    text.lastIndexOf("가입 가능한 연령은 ") + "가입 가능한 연령은 ".length(),
+                    text.lastIndexOf("세 ~ ")
                 ).replaceAll("\\D", ""));
 
                 int endAge = Integer.parseInt(text.substring(
-                        text.lastIndexOf("세 ~ ") + "세 ~ ".length(),
-                        text.lastIndexOf("까지 가능")
+                    text.lastIndexOf("세 ~ ") + "세 ~ ".length(),
+                    text.lastIndexOf("까지 가능")
                 ).replaceAll("\\D", ""));
 
                 helper.doClick(By.id("popupBtn2")); // 닫기 버튼
@@ -375,13 +396,13 @@ public class 신한생명 extends TargetCompnay {
                 logger.info("가입가능한 연령의 생년월일 {}", birthday);
 
                 for (WebElement el : helper.waitVisibilityOfAllElementsLocatedBy(
-                        By.xpath("//input[@title='생년월일']"))) {
+                    By.xpath("//input[@title='생년월일']"))) {
 
                     helper.doSendKeys(el, birthday); // 새 생년월일 입력
                 }
 
                 helper.doClick(
-                        By.cssSelector("#csinDivision > div.btnArea.btnLoCtl > span > button")); //확인버튼
+                    By.cssSelector("#csinDivision > div.btnArea.btnLoCtl > span > button")); //확인버튼
                 helper.waitForLoading();
             }
         } catch (Exception e) {
