@@ -6,19 +6,25 @@ import aims.util.WaitUtil;
 import aims.vo.TreatyScrapData;
 import aims.vo.ScrapResult;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.function.BiFunction;
 
 import aims.vo.TypeScrapData;
 import com.google.gson.Gson;
+import java.util.Set;
+import lombok.AllArgsConstructor;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.FluentWait;
 import org.openqa.selenium.support.ui.Select;
+import org.openqa.selenium.support.ui.Wait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,17 +34,6 @@ public class 신한생명 extends TargetCompnay {
 
     protected final static Map<String, List<String>> prdTypeMap = new HashMap<>();
 
-    static {
-        List<String> categories = new ArrayList<>();
-        categories.add("종신/정기");
-        categories.add("건강보험");
-        categories.add("상해");
-        categories.add("어린이");
-        categories.forEach(c -> {
-            categoryProductsMap.put(c, new ArrayList<>());
-        });
-    }
-
     public 신한생명(String url) {
         super(url);
     }
@@ -46,7 +41,8 @@ public class 신한생명 extends TargetCompnay {
     public static void main(String[] args) {
         try {
 
-            new 신한생명("https://www.shinhanlife.co.kr/hp/cdhi0290.do#").scrap();
+            신한생명 신한생명 = new 신한생명("https://www.shinhanlife.co.kr/hp/cdhi0290.do#");
+            신한생명.scrap();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -60,13 +56,67 @@ public class 신한생명 extends TargetCompnay {
         clickFirstCalcBtn();
     }
 
+    private Map<String, List<String>> setScrapRange() {
+
+        Map<String, List<String>> scrapRangeMap = new HashMap<>();
+
+        List<String> categories = new ArrayList<>();
+        categories.add("종신/정기");
+        categories.add("건강보험");
+        categories.add("상해");
+        categories.add("어린이");
+        categories.forEach(c -> {
+            scrapRangeMap.put(c, new ArrayList<>());
+        });
+
+        List<String> prdListSelected = null;
+/*        prdListSelected = Arrays.asList(
+            "상품명",
+            "상품명"
+        );*/
+
+        try {
+            start();
+
+            for (String category: scrapRangeMap.keySet()) {
+                selectCategory(category);
+
+                Select productSelect = new Select(driver.findElement(
+                    By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
+
+                List<String> prdList = getOptionStrings(productSelect);
+
+                if (prdListSelected != null && prdListSelected.size() > 0) {
+                    prdList.retainAll(prdListSelected);
+                }
+                scrapRangeMap.put(category, prdList);
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+
+        } finally {
+            stop();
+
+            int count = 0;
+            for (Entry<String, List<String>> entry : scrapRangeMap.entrySet()) {
+
+                logger.info("카테고리: {} ({}개)", entry.getKey(), entry.getValue().size());
+                count += entry.getValue().size();
+            }
+            logger.info("총 {} 개", count);
+        }
+
+        return scrapRangeMap;
+    }
+
     protected void scrap() throws Exception {
 
-        setDefaultScrapRange(); // 스크랩 범위 설정 (category에 따른 product 목록 설정)
+        Map<String, List<String>> scrapRangeMap = setScrapRange();// 스크랩 범위 설정 (category에 따른 product 목록 설정)
 
         List<ScrapResult> resultList = new ArrayList<>();
-        for (String category : categoryProductsMap.keySet()) {
-            for (String product : categoryProductsMap.get(category)) {
+        for (String category : scrapRangeMap.keySet()) {
+            for (String product : scrapRangeMap.get(category)) {
 
                 logger.info("카테고리: {} \\t 상품: {}", category, product);
                 ScrapTarget scrapTarget =
@@ -80,8 +130,29 @@ public class 신한생명 extends TargetCompnay {
                     selectProduct(product);
                     setUserInfo();
 
-//                    success = scrapTreatyOfProduct(category, product);
-                    success = scrapTypesOfProduct(category, product);
+                    Map<String, List<String>> typeMap = scrapTypesOfProduct(category, product);
+
+                    @AllArgsConstructor
+                    class KeyOption {
+                        String key;
+                        String option;
+                    }
+
+                    List<List<KeyOption>> typeList = new ArrayList<>();
+                    Iterator<String> keyIt = typeMap.keySet().iterator();
+
+                    for (String typeKey : typeMap.keySet()) {
+                        for (String option : typeMap.get(typeKey)) {
+
+                            KeyOption keyOption = new KeyOption(typeKey, option);
+
+
+                        }
+                    }
+
+
+
+                    success = scrapTreatyOfProduct(category, product, typeMap);
 
                 } catch (InterruptedException e) {
 
@@ -102,40 +173,45 @@ public class 신한생명 extends TargetCompnay {
         resultList.forEach(r -> logger.info(r.toString()));
     }
 
-    private boolean scrapTypesOfProduct(String category, String product) {
-        boolean success = false;
+    private Map<String, List<String>> scrapTypesOfProduct(String category, String product) {
+        Map<String, List<String>> typeMap = new HashMap<>();
 
         try {
             Map<String, List<String>> typeOptionMap = new HashMap<>();
+            List<WebElement> liList = helper.waitPesenceOfAllElementsLocatedBy(
+                    By.xpath("//div[@id='mnprDivision'] // li")).stream()
+                .filter(WebElement::isDisplayed).toList();
+
+            for (WebElement li : liList) {
+
+                String title = li.findElement(By.cssSelector("div.item")).getText();
+                WebElement div = li.findElement(By.cssSelector("div.val"));
+
+                List<String> optionList = null;
+                try {
+                    optionList = new Select(
+                        div.findElement(By.tagName("select")))
+                        .getOptions().stream()
+                        .map(WebElement::getText).toList();
+
+                    typeOptionMap.put(title, optionList);
+                } catch (NoSuchElementException ignore) {
+                    logger.info("select tag가 아님", ignore);
+                }
+
+                if ( (title.equals("보험종류") || title.equals("보험형태")) && optionList != null) {
+                    typeMap.put(title, optionList);
+                }
+            }
+
             TypeScrapData 신한생명 = new TypeScrapData("신한생명", category, product, typeOptionMap);
-
-            helper.waitPesenceOfAllElementsLocatedBy(
-                            By.xpath("//div[@id='mnprDivision'] // li")).stream()
-                    .filter(WebElement::isDisplayed)
-                    .forEach(li -> {
-                        String title = li.findElement(By.cssSelector("div.item")).getText();
-                        WebElement div = li.findElement(By.cssSelector("div.val"));
-                        try {
-                            List<String> optionList = new Select(
-                                    div.findElement(By.tagName("select")))
-                                    .getOptions().stream()
-                                    .map(WebElement::getText).toList();
-
-                            typeOptionMap.put(title, optionList);
-                        } catch (NoSuchElementException ignore) {
-                            logger.info("select tag가 아님", ignore);
-
-                        }
-                    });
-
             sendTypeOfProduct(신한생명);
 
-            success = true;
         } catch (Exception e) {
             logger.debug(e.getMessage());
         }
 
-        return success;
+        return typeMap;
     }
 
     private void sendTypeOfProduct(TypeScrapData typeScrapData) {
@@ -148,7 +224,8 @@ public class 신한생명 extends TargetCompnay {
 
     }
 
-    private boolean scrapTreatyOfProduct(String category, String product) {
+    private boolean scrapTreatyOfProduct(String category, String product,
+        Map<String, List<String>> typeMap) {
 
         boolean success = false;
 
@@ -160,6 +237,7 @@ public class 신한생명 extends TargetCompnay {
             for (String productType : types) {
                 logger.info("productType : {}", productType);
                 expandMainTreatyAcoBtn();
+
                 selectProductType(new Select(driver.findElement(
                         By.xpath("//select[@title='보험종류']"))), productType);
                 helper.waitForLoading();
@@ -219,36 +297,7 @@ public class 신한생명 extends TargetCompnay {
                 By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']"))), product);
     }
 
-    private void setDefaultScrapRange() {
 
-        try {
-            start();
-
-            for (String category: categoryProductsMap.keySet()) {
-                selectCategory(category);
-
-                Select productSelect = new Select(driver.findElement(
-                        By.xpath("//div[@class='dataSrchBox']/select[@title='상품명']")));
-
-                List<String> prdList = getOptionStrings(productSelect);
-                categoryProductsMap.put(category, prdList);
-            }
-
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-
-        } finally {
-            stop();
-
-            int count = 0;
-            for (Entry<String, List<String>> entry : categoryProductsMap.entrySet()) {
-
-                logger.info("카테고리: {} ({}개)", entry.getKey(), entry.getValue().size());
-                count += entry.getValue().size();
-            }
-            logger.info("총 {} 개", count);
-        }
-    }
 
     private void selectCategory(String category) throws InterruptedException {
         Select categorySelect = new Select(driver.findElement(

@@ -24,7 +24,7 @@ public abstract class TargetCompnay {
     protected static Helper helper;
     protected String url;
 
-    protected static final Map<String, List<String>> categoryProductsMap = new HashMap<>();
+
 
     @Getter
     @AllArgsConstructor
