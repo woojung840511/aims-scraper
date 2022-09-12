@@ -12,9 +12,7 @@ import java.util.Map.Entry;
 import aims.vo.TypeScrapData;
 import com.google.gson.Gson;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.ToString;
+import lombok.*;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
@@ -140,23 +138,8 @@ public class 신한생명 extends TargetCompnay {
                     setUserInfo();              // 사용자 정보 설정 (가입 가능 연령 설정)
 
                     // 상품에 속한 타입요소 스크랩후 api 전송함
-                    // 상품에 속한 타입요소 중 보험종류, 보험형태 셀렉트박스 옵션 내용만 map 형태로 리턴
-                    // key: 보험종류, 혹은 보험형태
-                    // value: 보험종류 혹은 보험형태에 속하는 옵션값들
-                    Map<String, List<String>> typeMap = scrapTypesOfProduct(category, product);
-
-                    Iterator<Map.Entry<String, List<String>>> iterator = typeMap.entrySet().iterator();
-
-                    ProductType productType = null;
-                    while (iterator.hasNext()) {
-                        Map.Entry<String, List<String>> current = iterator.next();
-                        ProductType p = new ProductType(
-                                current.getKey(),
-                                current.getValue(),
-                                productType);
-                        productType = p;
-                    }
-
+                    // 상품에 속한 타입요소 중 보험종류, 보험형태 셀렉트박스 옵션 내용만 ProductType 트리 형태로 리턴
+                    ProductType productType = scrapTypesOfProduct(category, product);
                     success = scrapTreatyOfProduct(category, product, productType);
 
                 } catch (InterruptedException e) {
@@ -178,8 +161,8 @@ public class 신한생명 extends TargetCompnay {
         scrapResults.forEach(r -> logger.info(r.toString()));
     }
 
-    private Map<String, List<String>> scrapTypesOfProduct(String category, String product) {
-        Map<String, List<String>> typeMap = new HashMap<>();
+    private ProductType scrapTypesOfProduct(String category, String product) {
+        ProductType next = null;
 
         try {
             Map<String, List<String>> typeOptionMap = new HashMap<>();
@@ -205,7 +188,8 @@ public class 신한생명 extends TargetCompnay {
                 }
 
                 if ((title.equals("보험종류") || title.equals("보험형태")) && optionList != null) {
-                    typeMap.put(title, optionList);
+                    ProductType productType = new ProductType(title, optionList, next);
+                    next = productType;
                 }
             }
 
@@ -216,7 +200,7 @@ public class 신한생명 extends TargetCompnay {
             logger.debug(e.getMessage());
         }
 
-        return typeMap;
+        return next;
     }
 
     private void sendTypeOfProduct(TypeScrapData typeScrapData) {
